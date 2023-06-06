@@ -2,7 +2,8 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import tensorflow as tf
+#import tensorflow as tf
+import tensorflow._api.v2.compat.v1 as tf
 import numpy as np
 
 
@@ -46,7 +47,8 @@ class CategoricalPd(Pd):
 
 def fc(x, scope, nh, init_scale=1.0, init_bias=0.0):
   with tf.variable_scope(scope):
-    nin = x.get_shape()[1].value
+    #nin = x.get_shape()[1].value
+    nin = x.get_shape()[1] # modified due to tensorflow version issue
     w = tf.get_variable("w", [nin, nh], initializer=ortho_init(init_scale))
     b = tf.get_variable("b", [nh],
                         initializer=tf.constant_initializer(init_bias))

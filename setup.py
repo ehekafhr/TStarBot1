@@ -24,7 +24,7 @@ setup(
     ],
     install_requires=[
         'gym==0.10.5',
-        'torch==0.4.0',
+        'torch',
         'tensorflow>=1.4.1',
         'joblib',
         'pyzmq'

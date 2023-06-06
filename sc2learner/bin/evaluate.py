@@ -26,6 +26,7 @@ flags.DEFINE_enum("agent", 'ppo', ['ppo', 'dqn', 'random', 'keyboard'],
                   "Agent name.")
 flags.DEFINE_enum("policy", 'mlp', ['mlp', 'lstm'], "Job type.")
 flags.DEFINE_string("game_version", '4.6', "Game core version.")
+# flags.DEFINE_integer("step_mul", 32, "Game steps per agent step.") # original code
 flags.DEFINE_integer("step_mul", 32, "Game steps per agent step.")
 flags.DEFINE_enum("difficulty", '1',
                   ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'A'],
@@ -35,11 +36,15 @@ flags.DEFINE_boolean("disable_fog", False, "Disable fog-of-war.")
 flags.DEFINE_boolean("use_all_combat_actions", False, "Use all combat actions.")
 flags.DEFINE_boolean("use_region_features", False, "Use region features")
 flags.DEFINE_boolean("use_action_mask", True, "Use action mask or not.")
+
+# modified code
+flags.DEFINE_boolean("restriction", False, "Give restriction.")
+
 flags.FLAGS(sys.argv)
 
 
 def create_env(random_seed=None):
-  env = SC2RawEnv(map_name='AbyssalReef',
+  env = SC2RawEnv(map_name='Simple64',
                   step_mul=FLAGS.step_mul,
                   agent_race='zerg',
                   bot_race='zerg',
@@ -73,7 +78,9 @@ def create_dqn_agent(env):
 
 
 def create_ppo_agent(env):
-  import tensorflow as tf
+  #import tensorflow as tf
+  import tensorflow._api.v2.compat.v1 as tf
+  
   import multiprocessing
   from sc2learner.agents.ppo_policies import LstmPolicy, MlpPolicy
   from sc2learner.agents.ppo_agent import PPOAgent
@@ -87,7 +94,7 @@ def create_ppo_agent(env):
   tf.Session(config=config).__enter__()
 
   policy = {'lstm': LstmPolicy, 'mlp': MlpPolicy}[FLAGS.policy]
-  agent = PPOAgent(env=env, policy=policy, model_path=FLAGS.model_path)
+  agent = PPOAgent(env=env, policy=policy, model_path=FLAGS.model_path, restriction=FLAGS.restriction)
   return agent
 
 
@@ -125,6 +132,7 @@ def evaluate():
       print("Evaluated %d/%d Episodes Avg Return %f Avg Winning Rate %f" % (
           i + 1, FLAGS.num_episodes, cum_return / (i + 1),
           ((cum_return / (i + 1)) + 1) / 2.0))
+
   except KeyboardInterrupt: pass
   finally: env.close()
 

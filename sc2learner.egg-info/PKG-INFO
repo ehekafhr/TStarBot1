@@ -1,0 +1,9 @@
+Metadata-Version: 2.1
+Name: sc2learner
+Version: 0.1
+Summary: Macro-action-based StarCraft-II learning environment.
+Author: Tencent AI Lab
+Author-email: xinghaisun@tencent.com
+Keywords: sc2learner StarCraft AI TStarBot
+
+Macro-action-based StarCraft-II learning environment.

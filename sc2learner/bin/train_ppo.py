@@ -12,7 +12,8 @@ import time
 from absl import app
 from absl import flags
 from absl import logging
-import tensorflow as tf
+#import tensorflow as tf
+import tensorflow._api.v2.compat.v1 as tf
 
 from sc2learner.agents.ppo_policies import LstmPolicy, MlpPolicy
 from sc2learner.agents.ppo_agent import PPOActor, PPOLearner
@@ -43,6 +44,12 @@ flags.DEFINE_integer("game_steps_per_episode", 43200, "Maximum steps per episode
 flags.DEFINE_integer("learner_queue_size", 1024, "Size of learner's unroll queue.")
 flags.DEFINE_integer("step_mul", 32, "Game steps per agent step.")
 flags.DEFINE_string("difficulties", '1,2,4,6,9,A', "Bot's strengths.")
+
+# modified code
+flags.DEFINE_string("difficulty", '1', "Bot's strengths gave by run_train_ppo.py")
+flags.DEFINE_integer("actorID", 0, "actor ID")
+flags.DEFINE_bool("soft", False, "soft alpha change")
+
 flags.DEFINE_float("learning_rate", 1e-5, "Learning rate.")
 flags.DEFINE_string("init_model_path", None, "Initial model path.")
 flags.DEFINE_string("save_dir", "./checkpoints/", "Dir to save models to")
@@ -68,7 +75,8 @@ def tf_config(ncpu=None):
 
 
 def create_env(difficulty, random_seed=None):
-  env = SC2RawEnv(map_name='AbyssalReef',
+  # original code : map_name='AbyssalReef'
+  env = SC2RawEnv(map_name='Simple64',
                   step_mul=FLAGS.step_mul,
                   resolution=16,
                   agent_race='zerg',
@@ -91,26 +99,52 @@ def create_env(difficulty, random_seed=None):
   print(env.observation_space, env.action_space)
   return env
 
-
+# DDR revised에서 담록이가 짠 코드가 존재.
 def start_actor():
+  policy = {'lstm': LstmPolicy,
+      'mlp': MlpPolicy}[FLAGS.policy]
   tf_config(ncpu=2)
   random.seed(time.time())
-  difficulty = random.choice(FLAGS.difficulties.split(','))
+  difficulty = '1'
+  #difficulty = random.choice(FLAGS.difficulties.split(','))
   game_seed =  random.randint(0, 2**32 - 1)
   print("Game Seed: %d Difficulty: %s" % (game_seed, difficulty))
   env = create_env(difficulty, game_seed)
-  policy = {'lstm': LstmPolicy,
-            'mlp': MlpPolicy}[FLAGS.policy]
   actor = PPOActor(env=env,
-                   policy=policy,
-                   unroll_length=FLAGS.unroll_length,
-                   gamma=FLAGS.discount_gamma,
-                   lam=FLAGS.lambda_return,
-                   learner_ip=FLAGS.learner_ip,
-                   port_A=FLAGS.port_A,
-                   port_B=FLAGS.port_B)
-  actor.run()
+                    policy=policy,
+                    unroll_length=FLAGS.unroll_length,
+                    gamma=FLAGS.discount_gamma,
+                    lam=FLAGS.lambda_return,
+                    learner_ip=FLAGS.learner_ip,
+                    port_A=FLAGS.port_A,
+                    port_B=FLAGS.port_B,
+                    actorID=FLAGS.actorID,
+                    softAlpha=FLAGS.soft)
+  # modified
+  actor.update_difficulty(difficulty)
+  
+  result = actor.run()
   env.close()
+  #ddr revised
+  while True:
+    if result==1:
+      difficulty = str(int(difficulty)+1)
+    elif result == -1 and int(difficulty) != 1:
+      difficulty = str(int(difficulty)-1)
+      
+    # difficulty  = 'A'
+    game_seed =  random.randint(0, 2**32 - 1)
+    print("Game Seed: %d Difficulty: %s" % (game_seed, difficulty))
+    envr = create_env(difficulty, game_seed)
+    envr.reset()
+    actor._upgrade = False
+    actor._downgrade = False
+    actor._env = envr
+    #actor._env.env.env._difficulty = difficulty
+    #actor._env.env.env._diffchange()
+    actor.update_difficulty(difficulty)
+    result = actor.run()
+    envr.close()
 
 
 def start_learner():
@@ -142,7 +176,20 @@ def start_learner():
 def main(argv):
   logging.set_verbosity(logging.ERROR)
   print_arguments(FLAGS)
-  if FLAGS.job_name == 'actor': start_actor()
+  if FLAGS.job_name == 'actor': 
+    start_actor() # original code
+    # modified code
+    # diff_array = ['1','2','4','6','9','A']
+    # for difficulty in diff_array:
+    #   # debug purpose
+    #   print("-----DEBUG-----")
+    #   print("new actor starts with difficulty : {}".format(difficulty))
+    #   start_actor(difficulty)
+    
+    # debug purpose
+    # print("is start_actor() done?")
+    
+  
   else: start_learner()
 
 

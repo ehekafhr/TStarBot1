@@ -13,7 +13,11 @@ import random
 import joblib
 
 import numpy as np
-import tensorflow as tf
+
+#import tensorflow as tf
+import tensorflow._api.v2.compat.v1 as tf
+
+
 import zmq
 from gym import spaces
 
@@ -125,12 +129,42 @@ class PPOActor(object):
 
   def __init__(self, env, policy, unroll_length, gamma, lam, queue_size=1,
                enable_push=True, learner_ip="localhost", port_A="5700",
-               port_B="5701"):
-    self._env = env
+               port_B="5701", actorID=0, softAlpha=False):
+    self._env = env # 여기서 env는 ZergObservationWrapper이다.
     self._unroll_length = unroll_length
     self._lam = lam
     self._gamma = gamma
     self._enable_push = enable_push
+
+    #In PPOActor
+    #DDR Revised
+    #self._env._difficulty = 0
+    self._wincount = 0
+    self._count = 0
+    self._upgrade = False
+    self._downgrade = False
+    self._noop_counter = 0
+    self._total_action_counter = 0
+    self._ratio = 0
+    self._alpha = 0.2
+    self._winrate = 0
+    self._ratio_list = np.zeros(100)
+    self._mean_ratio = 0
+    self._difficulty = 0
+    self._actorID = actorID
+    self._n = 0
+    self._softalpha = softAlpha
+    self._psudoAPM = 0
+    
+    
+    
+    #DDR Revise end
+
+    # modified code
+    if self._softalpha:
+      self._file_output_path = os.path.expanduser("~/Outputs_soft/output_"+str(self._actorID)+".txt")
+    else:
+      self._file_output_path = os.path.expanduser("~/Outputs_hard/output_"+str(self._actorID)+".txt")
 
     self._model = Model(policy=policy,
                         scope_name="model",
@@ -147,6 +181,7 @@ class PPOActor(object):
     self._done = False
     self._cum_reward = 0
 
+    # learner와는 socket 통신을 이용해 정보를 보내는거 같다.
     self._zmq_context = zmq.Context()
     self._model_requestor = self._zmq_context.socket(zmq.REQ)
     self._model_requestor.connect("tcp://%s:%s" % (learner_ip, port_A))
@@ -155,6 +190,9 @@ class PPOActor(object):
       self._push_thread = Thread(target=self._push_data, args=(
           self._zmq_context, learner_ip, port_B, self._data_queue))
       self._push_thread.start()
+
+  def update_difficulty(self, n_diff):
+    self._difficulty = n_diff
 
   def run(self):
     while True:
@@ -169,6 +207,11 @@ class PPOActor(object):
         if self._data_queue.full(): tprint("[WARN]: Actor's queue is full.")
         self._data_queue.put(unroll)
         tprint("Rollout time: %f" % (time.time() - t))
+      #DDR revised
+      if self._upgrade:
+        return 1
+      elif self._downgrade:
+        return -1
 
   def _nstep_rollout(self):
     mb_obs, mb_rewards, mb_actions, mb_values, mb_dones, mb_neglogpacs = \
@@ -179,6 +222,26 @@ class PPOActor(object):
           transform_tuple(self._obs, lambda x: np.expand_dims(x, 0)),
           self._state,
           np.expand_dims(self._done, 0))
+      
+      # modified code
+
+      # restrict action 
+      if self._psudoAPM > 100*self._alpha:
+        action[0] = 0
+
+      # modified by CHU
+      self._total_action_counter += 1
+      if action[0] == 0:
+        self._noop_counter += 1
+
+      if action[0] == 0:
+        self._psudoAPM = max(0, self._psudoAPM - 1)
+      else:
+        self._psudoAPM += 1
+
+      # modified code end
+
+    
       mb_obs.append(transform_tuple(self._obs, lambda x: x.copy()))
       mb_actions.append(action[0])
       mb_values.append(value[0])
@@ -186,11 +249,53 @@ class PPOActor(object):
       mb_dones.append(self._done)
       self._obs, reward, self._done, info = self._env.step(action[0])
       self._cum_reward += reward
-      if self._done:
+      if self._done: # 한 episode가 끝난 상태이다.
         self._obs = self._env.reset()
         self._state = self._model.initial_state
         episode_infos.append({'r': self._cum_reward})
         self._cum_reward = 0
+
+        #DDR revised
+        #revised. here to add apm restriction reward.
+        self._ratio = (self._total_action_counter - self._noop_counter) / self._total_action_counter
+        self._ratio_list[self._count] = self._ratio
+        self._mean_ratio = np.mean(self._ratio_list)
+
+        self._count += 1
+        self._wincount += reward # reward로 줬기 때문에, 0보다 크면 승률이 50%이다.
+        if self._count%100==0:
+          print(self._wincount)
+          if(self._wincount>=0.2):
+            self._upgrade = True
+          elif(self._wincount<=-0.2):
+            self._downgrade = True
+          
+          # 100판마다 winrate를 계산
+          self._winrate = (1 + self._wincount) * 0.5
+          
+          self._count = 0
+          self._n += 1
+          if self._softalpha:
+            self._alpha = max(0.2, 1 - 0.02*self._n)
+          self._wincount = 0
+          
+          # file에 출력
+          if not os.path.exists(self._file_output_path):
+            with open(self._file_output_path, "w") as output_file:
+              output_file.write(str(self._winrate)+" / "+str(self._mean_ratio)+" / "+str(self._difficulty)+"\n")
+          else:
+            with open(self._file_output_path, "a") as output_file:
+              output_file.write(str(self._winrate)+" / "+str(self._mean_ratio)+" / "+str(self._difficulty)+"\n")
+        
+        # reward = reward - self._ratio * self._alpha * 2
+        # reward = max(reward, -1) # no need to cliping
+
+        # action을 count할 때 reset을 해줬어야 했는데, 그게 지금 안되고 있었다.
+        self._total_action_counter = 0
+        self._noop_counter = 0
+
+        #DDR revise end
+
       mb_rewards.append(reward)
     if isinstance(self._obs, tuple):
       mb_obs = tuple(np.asarray(obs, dtype=self._obs[0].dtype)
@@ -201,7 +306,7 @@ class PPOActor(object):
     mb_actions = np.asarray(mb_actions)
     mb_values = np.asarray(mb_values, dtype=np.float32)
     mb_neglogpacs = np.asarray(mb_neglogpacs, dtype=np.float32)
-    mb_dones = np.asarray(mb_dones, dtype=np.bool)
+    mb_dones = np.asarray(mb_dones, dtype=bool)
     last_values = self._model.value(
         transform_tuple(self._obs, lambda x: np.expand_dims(x, 0)),
         self._state,
@@ -290,9 +395,17 @@ class PPOLearner(object):
     self._reply_model_thread.start()
 
   def run(self):
+    # debug purpose
+    print("Is it running?")
     #while len(self._data_queue) < self._data_queue.maxlen: time.sleep(1)
     while len(self._episode_infos) < self._episode_infos.maxlen / 2:
+      # debug purpose
+      print("I'm sleeping : len(_episode_infos) {}".format(len(self._episode_infos)))
+      # print("I'm sleeping : _episode_infos {}".format(self._episode_infos))
       time.sleep(1)
+
+    # debug purpose
+    print("I'm done sleeping")
 
     batch_queue = Queue(4)
     batch_threads = [
@@ -391,7 +504,7 @@ class PPOLearner(object):
 
 class PPOAgent(object):
 
-  def __init__(self, env, policy, model_path=None):
+  def __init__(self, env, policy, model_path=None, restriction=False):
     assert isinstance(env.action_space, spaces.Discrete)
     self._model = Model(policy=policy,
                         scope_name="model",
@@ -408,14 +521,31 @@ class PPOAgent(object):
     self._state = self._model.initial_state
     self._done = False
 
+    self._psudoAPM = 0
+    self._alpha = 0.2
+    self._restriction = restriction
+
   def act(self, observation):
       action, value, self._state, _ = self._model.step(
           transform_tuple(observation, lambda x: np.expand_dims(x, 0)),
           self._state,
           np.expand_dims(self._done, 0))
+      
+      # modified code
+      if(self._restriction == True):
+        # restrict action
+        if self._psudoAPM > 100*self._alpha:
+          action[0] = 0
+
+        if action[0] == 0:
+          self._psudoAPM = max(0, self._psudoAPM - 1)
+        else:
+          self._psudoAPM += 1
+
       return action[0]
 
   def reset(self):
+    self._psudoAPM = 0
     self._state = self._model.initial_state
 
 
@@ -532,7 +662,7 @@ class PPOSelfplayActor(object):
     mb_actions = np.asarray(mb_actions)
     mb_values = np.asarray(mb_values, dtype=np.float32)
     mb_neglogpacs = np.asarray(mb_neglogpacs, dtype=np.float32)
-    mb_dones = np.asarray(mb_dones, dtype=np.bool)
+    mb_dones = np.asarray(mb_dones, dtype=bool)
     last_values = self._model.value(
         transform_tuple(self._obs, lambda x: np.expand_dims(x, 0)),
         self._state,

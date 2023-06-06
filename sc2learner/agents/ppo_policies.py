@@ -3,7 +3,8 @@ from __future__ import division
 from __future__ import print_function
 
 import numpy as np
-import tensorflow as tf
+#import tensorflow as tf
+import tensorflow._api.v2.compat.v1 as tf
 
 from sc2learner.envs.spaces.mask_discrete import MaskDiscrete
 from sc2learner.agents.utils_tf import CategoricalPd
