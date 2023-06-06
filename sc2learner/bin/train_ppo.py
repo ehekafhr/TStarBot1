@@ -49,6 +49,7 @@ flags.DEFINE_string("difficulties", '1,2,4,6,9,A', "Bot's strengths.")
 flags.DEFINE_string("difficulty", '1', "Bot's strengths gave by run_train_ppo.py")
 flags.DEFINE_integer("actorID", 0, "actor ID")
 flags.DEFINE_bool("soft", False, "soft alpha change")
+# modified code end
 
 flags.DEFINE_float("learning_rate", 1e-5, "Learning rate.")
 flags.DEFINE_string("init_model_path", None, "Initial model path.")
@@ -99,7 +100,7 @@ def create_env(difficulty, random_seed=None):
   print(env.observation_space, env.action_space)
   return env
 
-# DDR revised에서 담록이가 짠 코드가 존재.
+
 def start_actor():
   policy = {'lstm': LstmPolicy,
       'mlp': MlpPolicy}[FLAGS.policy]
@@ -120,7 +121,8 @@ def start_actor():
                     port_B=FLAGS.port_B,
                     actorID=FLAGS.actorID,
                     softAlpha=FLAGS.soft)
-  # modified
+  
+  # modified code start
   actor.update_difficulty(difficulty)
   
   result = actor.run()
@@ -145,6 +147,7 @@ def start_actor():
     actor.update_difficulty(difficulty)
     result = actor.run()
     envr.close()
+  # modified code end
 
 
 def start_learner():

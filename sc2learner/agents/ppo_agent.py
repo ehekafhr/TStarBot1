@@ -130,7 +130,7 @@ class PPOActor(object):
   def __init__(self, env, policy, unroll_length, gamma, lam, queue_size=1,
                enable_push=True, learner_ip="localhost", port_A="5700",
                port_B="5701", actorID=0, softAlpha=False):
-    self._env = env # 여기서 env는 ZergObservationWrapper이다.
+    self._env = env 
     self._unroll_length = unroll_length
     self._lam = lam
     self._gamma = gamma
@@ -155,16 +155,13 @@ class PPOActor(object):
     self._n = 0
     self._softalpha = softAlpha
     self._psudoAPM = 0
-    
-    
-    
     #DDR Revise end
 
-    # modified code
     if self._softalpha:
       self._file_output_path = os.path.expanduser("~/Outputs_soft/output_"+str(self._actorID)+".txt")
     else:
       self._file_output_path = os.path.expanduser("~/Outputs_hard/output_"+str(self._actorID)+".txt")
+    # modified code end
 
     self._model = Model(policy=policy,
                         scope_name="model",
@@ -181,7 +178,6 @@ class PPOActor(object):
     self._done = False
     self._cum_reward = 0
 
-    # learner와는 socket 통신을 이용해 정보를 보내는거 같다.
     self._zmq_context = zmq.Context()
     self._model_requestor = self._zmq_context.socket(zmq.REQ)
     self._model_requestor.connect("tcp://%s:%s" % (learner_ip, port_A))
@@ -207,11 +203,14 @@ class PPOActor(object):
         if self._data_queue.full(): tprint("[WARN]: Actor's queue is full.")
         self._data_queue.put(unroll)
         tprint("Rollout time: %f" % (time.time() - t))
+      
+      # modified code start
       #DDR revised
       if self._upgrade:
         return 1
       elif self._downgrade:
         return -1
+      # modified code end
 
   def _nstep_rollout(self):
     mb_obs, mb_rewards, mb_actions, mb_values, mb_dones, mb_neglogpacs = \
@@ -223,7 +222,7 @@ class PPOActor(object):
           self._state,
           np.expand_dims(self._done, 0))
       
-      # modified code
+      # modified code start
 
       # restrict action 
       if self._psudoAPM > 100*self._alpha:
@@ -249,12 +248,13 @@ class PPOActor(object):
       mb_dones.append(self._done)
       self._obs, reward, self._done, info = self._env.step(action[0])
       self._cum_reward += reward
-      if self._done: # 한 episode가 끝난 상태이다.
+      if self._done: 
         self._obs = self._env.reset()
         self._state = self._model.initial_state
         episode_infos.append({'r': self._cum_reward})
         self._cum_reward = 0
 
+        # modified code start
         #DDR revised
         #revised. here to add apm restriction reward.
         self._ratio = (self._total_action_counter - self._noop_counter) / self._total_action_counter
@@ -262,7 +262,7 @@ class PPOActor(object):
         self._mean_ratio = np.mean(self._ratio_list)
 
         self._count += 1
-        self._wincount += reward # reward로 줬기 때문에, 0보다 크면 승률이 50%이다.
+        self._wincount += reward
         if self._count%100==0:
           print(self._wincount)
           if(self._wincount>=0.2):
@@ -270,7 +270,6 @@ class PPOActor(object):
           elif(self._wincount<=-0.2):
             self._downgrade = True
           
-          # 100판마다 winrate를 계산
           self._winrate = (1 + self._wincount) * 0.5
           
           self._count = 0
@@ -279,7 +278,6 @@ class PPOActor(object):
             self._alpha = max(0.2, 1 - 0.02*self._n)
           self._wincount = 0
           
-          # file에 출력
           if not os.path.exists(self._file_output_path):
             with open(self._file_output_path, "w") as output_file:
               output_file.write(str(self._winrate)+" / "+str(self._mean_ratio)+" / "+str(self._difficulty)+"\n")
@@ -290,11 +288,11 @@ class PPOActor(object):
         # reward = reward - self._ratio * self._alpha * 2
         # reward = max(reward, -1) # no need to cliping
 
-        # action을 count할 때 reset을 해줬어야 했는데, 그게 지금 안되고 있었다.
         self._total_action_counter = 0
         self._noop_counter = 0
 
         #DDR revise end
+        # modified code end
 
       mb_rewards.append(reward)
     if isinstance(self._obs, tuple):
@@ -395,17 +393,16 @@ class PPOLearner(object):
     self._reply_model_thread.start()
 
   def run(self):
-    # debug purpose
-    print("Is it running?")
     #while len(self._data_queue) < self._data_queue.maxlen: time.sleep(1)
     while len(self._episode_infos) < self._episode_infos.maxlen / 2:
+      
+      # modified code
       # debug purpose
       print("I'm sleeping : len(_episode_infos) {}".format(len(self._episode_infos)))
       # print("I'm sleeping : _episode_infos {}".format(self._episode_infos))
+      # modified code end
+      
       time.sleep(1)
-
-    # debug purpose
-    print("I'm done sleeping")
 
     batch_queue = Queue(4)
     batch_threads = [
@@ -541,6 +538,7 @@ class PPOAgent(object):
           self._psudoAPM = max(0, self._psudoAPM - 1)
         else:
           self._psudoAPM += 1
+        # modified code end
 
       return action[0]
 
