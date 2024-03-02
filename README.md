@@ -1,5 +1,4 @@
-# SC2Learner (TStarBot1) - Macro-Action-Based StarCraft-II Reinforcement Learning Environment
-
+# SC2Learner (TStarBot1) - Macro-Action-Based StarCraft-II Reinforcement Learning Environment - modified version used in DGIST Reinforcement Learning subject
 
 <p align="center">
 <img src="docs/images/overview.png" width=750>
@@ -17,6 +16,7 @@ The environments and wrappers strictly follow the interface of [OpenAI Gym](http
 A whitepaper of *TStarBots* is available at [here](https://arxiv.org/pdf/1809.07193.pdf).
 
 ## Table of Contents
+- [modified point](#modified-point)
 - [Installations](#installations)
 - [Getting Started](#getting-started)
  	- [Run Random Agent](#run-random-agent)
@@ -27,6 +27,13 @@ A whitepaper of *TStarBots* is available at [here](https://arxiv.org/pdf/1809.07
 - [Environments and Wrappers](environments-and-wrappers)
 - [Questions ans Help](questions-and-help)
 
+## modified point
+
+We modified codes in these points
+
+- Modified tensorflow import parts to work on newer tensorflow version. It works with tensorflow 2.8 now.
+- Modified reward functions to restrict APMs of agent
+- More detailed informations are in our final report.
 
 ## Installations
 
