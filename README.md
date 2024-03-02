@@ -33,7 +33,7 @@ We modified codes in these points
 
 - Modified tensorflow import parts to work on newer tensorflow version. It works with tensorflow 2.8 now.
 - Modified reward functions to restrict APMs of agent
-- More detailed informations are in our final report.
+- More detailed informations are in our [final report](/RL_team_project_final_report_2.pdf) and [final presentation](/RL_team_project_2_final_presentation.pdf)
 
 ## Installations
 
